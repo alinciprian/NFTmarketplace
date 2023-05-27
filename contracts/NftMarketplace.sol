@@ -1,11 +1,11 @@
 //SPDX-License-Identifier:MIT
 pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "../node_modules/@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "../node_modules/@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "../node_modules/@openzeppelin/contracts/access/Ownable.sol";
+import "../node_modules/@openzeppelin/contracts/utils/Counters.sol";
+import "../node_modules/@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 error PriceNotMet(address nftContract, uint256 tokenId, uint256 price);
 error ItemNotForSale(address nftContract, uint256 tokenId);
@@ -116,7 +116,7 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         uint256 royalties
     )
         external
-        notListed(nftContract, tokenId)
+        
         isOwner(nftContract, tokenId, msg.sender)
         nonReentrant
     {
@@ -128,7 +128,7 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
             revert NotApprovedForMarketplace();
         }
 
-       _safeTransferFrom(tokenId, msg.sender, address(this), nftContract);
+        _safeTransferFrom(tokenId, msg.sender, address(this), nftContract);
     }
 
     function _safeTransferFrom(
