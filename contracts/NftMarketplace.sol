@@ -44,6 +44,7 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
     }
 
     event newAuction(address nftContract, uint256 tokenId, uint256 deadline);
+    event auctionCancelled(address nftContract, uint256 tokenId);
     event ItemOnSale(
         address seller,
         address nftContract,
@@ -114,12 +115,7 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         uint256 price,
         address creator,
         uint256 royalties
-    )
-        external
-        
-        isOwner(nftContract, tokenId, msg.sender)
-        nonReentrant
-    {
+    ) external isOwner(nftContract, tokenId, msg.sender) nonReentrant {
         if (price <= 0) {
             revert PriceMustBeAboveZero();
         }
@@ -129,6 +125,31 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         }
 
         _safeTransferFrom(tokenId, msg.sender, address(this), nftContract);
+        ERC721Sells[nftContract][tokenId].owner = payable(msg.sender);
+        ERC721Sells[nftContract][tokenId].price = price;
+        ERC721Sells[nftContract][tokenId].creator = payable(creator);
+        ERC721Sells[nftContract][tokenId].royalties = royalties;
+        emit ItemOnSale(msg.sender, nftContract, tokenId, price, creator, royalties);
+    }
+
+    function cancelSell(
+        address nftContract,
+        uint256 tokenId
+    ) external nonReentrant isOwner(nftContract, tokenId, msg.sender) {
+        delete ERC721Sells[nftContract][tokenId];
+        _safeTransferFrom(tokenId, address(this), msg.sender, nftContract);
+        emit auctionCancelled(nftContract, tokenId);
+    }
+
+    function buyItem(
+        address nftContract,
+        uint256 tokenId
+    ) external payable nonReentrant isListed(nftContract, tokenId) {
+        Sell memory sell = ERC721Sells[nftContract][tokenId];
+        delete ERC721Sells[nftContract][tokenId];
+        if(msg.value < sell.price) {
+            revert PriceNotMet(nftContract, tokenId, sell.price);
+        }
     }
 
     function _safeTransferFrom(
