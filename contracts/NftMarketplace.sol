@@ -11,10 +11,13 @@ error PriceNotMet(address nftContract, uint256 tokenId, uint256 price);
 error ItemNotForSale(address nftContract, uint256 tokenId);
 error NotListed(address nftContract, uint256 tokenId);
 error AlreadyListed(address nftContract, uint256 tokenId);
+error CurrentlyInAuction(address nftContract, uint256 tokenId);
+error CurrentlyNotInAuction(address nftContract, uint256 tokenId);
 error NoUnclaimedFunds();
 error NotOwner();
 error NotApprovedForMarketplace();
 error PriceMustBeAboveZero();
+error InvalidArguments();
 
 contract NftMarketplace is ReentrancyGuard, Ownable {
     using Counters for Counters.Counter;
@@ -66,10 +69,26 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         _;
     }
 
+    modifier notAuctioned(address nftContract, uint256 tokenId) {
+        Auction memory auction = ERC721Auctions[nftContract][tokenId];
+        if (auction.price > 0) {
+            revert CurrentlyInAuction(nftContract, tokenId);
+        }
+        _;
+    }
+
     modifier isListed(address nftContract, uint256 tokenId) {
         Sell memory sell = ERC721Sells[nftContract][tokenId];
         if (sell.price <= 0) {
             revert NotListed(nftContract, tokenId);
+        }
+        _;
+    }
+
+    modifier isAuctioned(address nftContract, uint256 tokenId) {
+        Auction memory auction = ERC721Auctions[nftContract][tokenId];
+        if (auction.price <= 0) {
+            revert CurrentlyNotInAuction(nftContract, tokenId);
         }
         _;
     }
@@ -105,6 +124,8 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         (bool success, ) = payable(msg.sender).call{value: userFunds}("");
         require(success, "Transfer Failed");
     }
+
+    // START SELLING
 
     /** setItemOnSale Must be called only by owner, must not be previously listed
     Listing price must be above 0, must be approved. At the end, emits event*/
@@ -153,32 +174,56 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
 
         _safeTransferFrom(tokenId, address(this), msg.sender, nftContract);
 
-        uint256 marketplace_royalties = sell.price.div(100).mul(
-            marketplaceFee
-        );
+        uint256 marketplace_royalties = sell.price.div(100).mul(marketplaceFee);
 
-        uint256 creator_royalties = msg.value.div(100).mul(
-            sell.royalties
-        );
+        uint256 creator_royalties = msg.value.div(100).mul(sell.royalties);
 
         uint256 owner_royalties = msg.value.sub(creator_royalties).sub(marketplace_royalties);
 
-        (bool success,) = sell.owner.call{value:owner_royalties}("");
-        if(!success) {
+        (bool success, ) = sell.owner.call{value: owner_royalties}("");
+        if (!success) {
             unclaimedFunds[sell.owner] += owner_royalties;
         }
 
         (bool success1, ) = sell.creator.call{value: creator_royalties}("");
-        if(!success1) {
+        if (!success1) {
             unclaimedFunds[sell.creator] += creator_royalties;
         }
 
         (bool success2, ) = marketplaceOwner.call{value: marketplace_royalties}("");
-        if(!success2) {
+        if (!success2) {
             unclaimedFunds[marketplaceOwner] += marketplace_royalties;
         }
+    }
+
+    //STOP SELLING
+
+    //AUCTION START
+
+    /** who sets the creator and only owner can call?? */
+    function setItemOnAuction(
+        address nftContract,
+        uint256 tokenId,
+        uint256 price,
+        uint256 duration,
+        uint256 royalties,
+        address creator
+    ) external nonReentrant  notAuctioned(nftContract, tokenId) notListed(nftContract, tokenId){
+        if(price <= 0 && duration <=0 && duration  > 25) {
+            revert InvalidArguments();
+        }
+
+        _safeTransferFrom((tokenId), msg.sender, address(this), nftContract);
+
+        ERC721Auctions[nftContract][tokenId].owner = payable(msg.sender);
+        ERC721Auctions[nftContract][tokenId].creator = payable(creator);
+        ERC721Auctions[nftContract][tokenId].price = price;
+        ERC721Auctions[nftContract][tokenId].duration = duration;
+        ERC721Auctions[nftContract][tokenId].royalties = royalties;
 
     }
+
+    //AUCTION END
 
     function _safeTransferFrom(
         uint256 _tokenId,
