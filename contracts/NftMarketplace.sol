@@ -147,9 +147,37 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
     ) external payable nonReentrant isListed(nftContract, tokenId) {
         Sell memory sell = ERC721Sells[nftContract][tokenId];
         delete ERC721Sells[nftContract][tokenId];
-        if(msg.value < sell.price) {
+        if (msg.value < sell.price) {
             revert PriceNotMet(nftContract, tokenId, sell.price);
         }
+
+        _safeTransferFrom(tokenId, address(this), msg.sender, nftContract);
+
+        uint256 marketplace_royalties = sell.price.div(100).mul(
+            marketplaceFee
+        );
+
+        uint256 creator_royalties = msg.value.div(100).mul(
+            sell.royalties
+        );
+
+        uint256 owner_royalties = msg.value.sub(creator_royalties).sub(marketplace_royalties);
+
+        (bool success,) = sell.owner.call{value:owner_royalties}("");
+        if(!success) {
+            unclaimedFunds[sell.owner] += owner_royalties;
+        }
+
+        (bool success1, ) = sell.creator.call{value: creator_royalties}("");
+        if(!success1) {
+            unclaimedFunds[sell.creator] += creator_royalties;
+        }
+
+        (bool success2, ) = marketplaceOwner.call{value: marketplace_royalties}("");
+        if(!success2) {
+            unclaimedFunds[marketplaceOwner] += marketplace_royalties;
+        }
+
     }
 
     function _safeTransferFrom(
@@ -160,6 +188,4 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
     ) internal {
         IERC721(_nftContract).safeTransferFrom(_from, _to, _tokenId);
     }
-
-
 }
