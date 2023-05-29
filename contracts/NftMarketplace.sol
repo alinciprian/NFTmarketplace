@@ -95,7 +95,7 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         marketplaceFee = price;
     }
 
-    /** claimFunds allows user to redeem the funds stored in the marketplace contract. */
+    /** claimFunds allows user to redeem the funds stored in the marketplace contract.--------- */
     function claimFunds() external nonReentrant {
         uint256 userFunds = unclaimedFunds[msg.sender];
         if (unclaimedFunds[msg.sender] <= 0) {
@@ -160,4 +160,6 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
     ) internal {
         IERC721(_nftContract).safeTransferFrom(_from, _to, _tokenId);
     }
+
+
 }
