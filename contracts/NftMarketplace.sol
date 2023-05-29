@@ -56,6 +56,8 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         address creator,
         uint256 royalties
     );
+    event ItemBought(address nftContract, uint256 tokenId);
+    event AuctionSettles(address nftContract, uint256 tokenId, uint256 price);
 
     mapping(address => uint256) public unclaimedFunds;
     mapping(address => mapping(uint256 => Sell)) public ERC721Sells;
@@ -194,6 +196,8 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         if (!success2) {
             unclaimedFunds[marketplaceOwner] += marketplace_royalties;
         }
+
+        emit ItemBought(nftContract, tokenId);
     }
 
     //STOP SELLING
@@ -222,6 +226,8 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         ERC721Auctions[nftContract][tokenId].royalties = royalties;
 
     }
+
+
 
     //AUCTION END
 
