@@ -18,6 +18,7 @@ error NotOwner();
 error NotApprovedForMarketplace();
 error PriceMustBeAboveZero();
 error InvalidArguments();
+error NewBidMustBeHigher();
 
 contract NftMarketplace is ReentrancyGuard, Ownable {
     using Counters for Counters.Counter;
@@ -56,8 +57,6 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         address creator,
         uint256 royalties
     );
-    event ItemBought(address nftContract, uint256 tokenId);
-    event AuctionSettles(address nftContract, uint256 tokenId, uint256 price);
 
     mapping(address => uint256) public unclaimedFunds;
     mapping(address => mapping(uint256 => Sell)) public ERC721Sells;
@@ -196,15 +195,15 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         if (!success2) {
             unclaimedFunds[marketplaceOwner] += marketplace_royalties;
         }
-
-        emit ItemBought(nftContract, tokenId);
     }
 
     //STOP SELLING
 
     //AUCTION START
 
-    /** who sets the creator and only owner can call?? */
+    /** who sets the creator and only owner can call?? 
+    At the start of each function create a pointer to the struct stored in contract rather than reading from contract every time*/
+
     function setItemOnAuction(
         address nftContract,
         uint256 tokenId,
@@ -212,22 +211,48 @@ contract NftMarketplace is ReentrancyGuard, Ownable {
         uint256 duration,
         uint256 royalties,
         address creator
-    ) external nonReentrant  notAuctioned(nftContract, tokenId) notListed(nftContract, tokenId){
-        if(price <= 0 && duration <=0 && duration  > 25) {
+    ) external nonReentrant notAuctioned(nftContract, tokenId) notListed(nftContract, tokenId) {
+        Auction memory auction = ERC721Auctions[nftContract][tokenId];
+        if (price <= 0 && duration <= 0 && duration > 25) {
             revert InvalidArguments();
         }
 
         _safeTransferFrom((tokenId), msg.sender, address(this), nftContract);
 
-        ERC721Auctions[nftContract][tokenId].owner = payable(msg.sender);
-        ERC721Auctions[nftContract][tokenId].creator = payable(creator);
-        ERC721Auctions[nftContract][tokenId].price = price;
-        ERC721Auctions[nftContract][tokenId].duration = duration;
-        ERC721Auctions[nftContract][tokenId].royalties = royalties;
-
+        auction.owner = payable(msg.sender);
+        auction.creator = payable(creator);
+        auction.price = price;
+        auction.duration = duration;
+        auction.royalties = royalties;
     }
 
 
+    /**DEADLINE = 0 ? */
+    function placeBid(
+        address nftContract,
+        uint256 tokenId
+    ) external payable nonReentrant isAuctioned(nftContract, tokenId) {
+        Auction memory auction = ERC721Auctions[nftContract][tokenId];
+        require(auction.owner != msg.sender);
+        require(
+            auction.deadline == 0 ||
+                auction.deadline >= block.timestamp, "Auction not valid"
+        );
+
+        if(auction.deadline == 0){
+            if(msg.value <= auction.price) {
+                revert PriceNotMet(nftContract, tokenId, auction.price);
+            }
+            uint256 timestamp = block.timestamp + auction.duration * 1 hours;
+            auction.deadline = timestamp;
+
+            emit newAuction(nftContract, tokenId, timestamp);
+        } else {
+            if(msg.value <= auction.latestBid + auction.latestBid.mul(15).div(100)) {
+                revert NewBidMustBeHigher();
+            }
+        }
+    }
 
     //AUCTION END
 
